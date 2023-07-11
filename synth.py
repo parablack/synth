@@ -193,6 +193,8 @@ def timer():
     start = time.process_time_ns()
     yield lambda: time.process_time_ns() - start
 
+samples = []
+
 def synth_n(spec_solver: SpecWithSolver, ops: list[Func], n_insns, \
             debug=0, max_const=None, output_prefix=None, \
             opt_no_dead_code=True, opt_no_cse=True, opt_const=True, \
@@ -501,7 +503,16 @@ def synth_n(spec_solver: SpecWithSolver, ops: list[Func], n_insns, \
 
     stats = []
     # sample the specification once for an initial set of input samples
+    global samples
+    
+    # if len(samples) > 0:
+    #     for (i, sample) in enumerate(samples):
+    #         add_constr_instance(synth, 100000000 + i)
+    #         add_constr_io_sample(synth, 100000000 + i, sample)
+    # 
     sample = eval_spec([None] * n_inputs)
+    samples.append(sample)
+
     i = 0
     while True:
         stat = {}
@@ -554,6 +565,7 @@ def synth_n(spec_solver: SpecWithSolver, ops: list[Func], n_insns, \
                 d(3, 'verification model', m)
                 verif.pop()
                 sample = eval_spec([ m[e] for e in eval_ins ])
+                samples.append(sample)
                 i += 1
             else:
                 # clean up the verification solver state
@@ -582,6 +594,8 @@ def synth(spec: Spec, ops: list[Func], iter_range, **args):
     if no program has been found) and stats is a list of statistics for each
     iteration of the synthesis loop.
     """
+    global samples
+    samples = []
     all_stats = []
     spec_solver = SpecWithSolver(spec)
     for n_insns in iter_range:
