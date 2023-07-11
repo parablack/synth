@@ -1,0 +1,140 @@
+
+\documentclass[a4paper]{article}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{hyperref}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{corollary}[definition]{Corollary}
+\newtheorem{remark}[definition]{Remark}
+\newtheorem{example}[definition]{Example}
+
+\DeclareMathOperator*{\id}{id}
+\renewcommand{\S}{\mathcal{S}}
+
+\begin{document}
+
+\title{Sketch: Counterexample-Guided Program Synthesis for Exact Boolean Minimization}
+
+
+\maketitle
+
+\begin{abstract}
+  We sketch a function synthesis approach based on the paper ``Synthesis of Loop-Free Programs'' \cite{DBLP:conf/pldi/GulwaniJTV11} by Gulwani et. al.
+  Our approach synthesizes the shortest provably correct program that fulfils a given specification. The allowed components (operators) in synthesized programs can be freely chosen by the user. Hence, this approach is generic with respect to the components and functions to synthesize.
+  Contrary to the original paper, our approach does not require an a-priori specification of the precise amount of instances of a specific component. Instead, our approach can instantiate each operator as often as it sees fit.
+
+%  \cite{DBLP:journals/tcad/HaaswijkSMM20}
+  In this article, we put a focus on how this approach can be instantiated for exact boolean function minimization, i.e. the problem of finding a minimum equivalent boolean formula. Some preliminary results suggest that this method can outperform previous approaches for boolean function minimization.operator
+\end{abstract}
+
+\section{Introduction}
+
+\paragraph*{Counterexample-Guided Synthesis} is an efficient method for solving exists-forall formulas in first order. It was introduced by Gulwani et al \cite{DBLP:conf/pldi/GulwaniJTV11} and is currently widely used in practice for program optimization (e.g. in the Souper superoptimizer \cite{Souper}).
+
+\paragraph*{Boolean function minimization} algorithms find, given a boolean formula, a small equivalent boolean formula. This, for example, is a central problem in circuit synthesis \cite{brayton1984espresso, Rudell:M86/65}. In general, the exact boolean minimization problem is NP-hard, it even is $\Sigma_2^P$-complete \cite{DBLP:conf/icalp/BuchfuhrerU08}.
+Approaches can be classified by the shape of the output formula. For example, Quine-McCluskey and ESPRESSO minimize formulas in DNF. In contrast, our approach produces arbitrarily-nested formulas built with a given \emph{component library}. This library can be freely specified to include any arbitrary boolean operator.
+
+\section{The Synthesis Process}
+
+At its core, our approach follows the technique presented by Gulwani et. al. in ``Synthesis of Loop-free programs'' \cite{DBLP:conf/pldi/GulwaniJTV11}. The process descriped in sections \ref{synth:synth-step} and \ref{synth:verif-step} follows mainly this paper.
+However, the original approach required the exact amount of components in the operator library, i.e. operators had to be duplicated in the program library. 
+In contrast, we allow an arbitrary combination of components. Components can be used once, multiple times or not at all in the synthesized program. Hence, no duplicate components in the component library are necessary, and no dead code is produced by our approach. 
+
+\subsection{Component Libraries}
+
+  Our approach is completely generic w.r.t. component specifications.
+  A $n$-ary component is a function with $n$ inputs and a single output. Its semantics must be specified by an SMT formula. All components in the component library may be used arbitrarily often as instructions in the final program.
+
+  For example, in a theory of bitvectors, suitable components could be bit-vector addition, multiplication and bitwise operations.
+
+  For boolean logic minimization, one could make use of a component library consisting of \verb!not1, and2, or2, xor2!. However, this library can again be freely extended with \emph{any} boolean operator.
+
+\subsection{Synthesis Step} \label{synth:synth-step}
+
+Our goal is to build a straight-line program with \emph{at most $n$ instructions} consisting of operators in our library. To this end, we identify each operator with a numerical identification number. The function $\id$ maps an operator in a library to its id.
+
+We encode our synthesis constraints in SMT with the following variables:
+\begin{itemize}
+  \item $O_i \in \{\id(\text{and}), \id(\text{or}), \id(\text{xor}), \id(\text{not}), \dots\}$ is the operator at position $i$. For example, if $O_1 = \id(\text{and})$, this means that the operator at position $1$ in our synthesized program is an ``and''-operator. % insn_x_op
+  \item $V_i^1, V_i^2, \dots$ denote the \emph{inputs} to the $i$-th instructions. There must be variables $V_i^1, \dots V_i^j$ where $j$ is the maximal arity of \emph{any} operator in the component library.
+  For example, the variable $V_i^1$ encodes the \emph{first} input of the $i$-th operator. The value of this variable is either (a) an input variable or (b) the result of an instruction $O_j$, where $j < i$.
+  \item Variables that ensure each instruction is well-typed. For boolean function minimization, these become trivial, as there is only one type (Bool).
+\end{itemize}
+
+The above constraints allow us to build any well-formed program. Note that such a program can be extracted in a straight-forward way from a satisfiable assignment by considering the variables $O_i$ and $V_i^j$.
+However, this program may produce completely arbitrary output. Hence, for \emph{some} inputs $\S$, we add more constraints to our program. This set $S$ is later extended through a counterexample-guided iterative refinement.  %In the next verification step, if an input violating the condition is found, this input will be added to
+For each input in $\S$, we add extra variables describing the input and the expected output, sampled from the specification. Note that this adds linearly many variables in the program length, which are used to store intermediate results.
+
+If there is a satisfiable assignment, our approach constructs a program from it. If the problem is unsatisfiable, no program of at most $n$ instructions exist that satisfies the specification in $\S$. Hence, the bound has to be increased. Overall, to find the minimal program, we perform a linear search on $n$.
+
+\subsection{Verification Step} \label{synth:verif-step}
+
+After a program is extracted from the synthesis step, it is tested for conformity with the overall specification. This step is similar to the steps described in \cite{DBLP:conf/pldi/GulwaniJTV110}.
+
+If the program satisfies the specification, it is a valid solution and can be returned. Else, we get a counter-example that violates the specification. This counter-example is added to $\S$, and the synthesis step is repeated.
+
+\subsection{Optimisation Constraints}
+More constraints can be added to further restrict solutions:
+\begin{itemize}
+  \item Commutative operators: If the operator $O_i$ is commutative, the parameters can be ordered, i.e. $V_i^1 < V_i^2 < \dots < V_i^j$.
+  \item Idempotent operators: If $O_i$ is idempotent, it must hold that $V_i^1 \not= \dots \not= V_i^j$
+  \item No duplicate computation: If an operation appears twice, at least one operand must be different from the first occurence.
+  \item No dead code: Every result $O_i$ must eventually be used.
+  \item No constant operators: For given operations, especially in the boolean case, operations involving constants cannot yield better results and can therefore be ignored.
+  \item To be continued.
+\end{itemize}
+
+\section{Results}
+
+\subsection{Comparison with existing tools}
+Comparable existing tools are
+\begin{itemize}
+  \item ESPRESSO for two-level (DNF) optimisation. Clearly, a DNF must always have size greater or equal to a minimal formula. Hence, this approach is used as a baseline. On some instances, especially for formulas like $f(x_1, \dots, x_n) = x_1 \oplus \dots \oplus x_n$, a minimal DNF must be exponentially larger than a formula that can use $\oplus$. 
+  \item ABC \cite{DBLP:journals/tcad/HaaswijkSMM20} implements a SAT-based approach for function minimization. However, the current implementation is buggy. While (per specification), ABC should allow arbitrary 2-ary operators, in practice it synthesizes sub-optimal circuits. For example, for the constant function $1$ with two variables, it produces the following (claimed minimal) program: 
+  \begin{verbatim}
+n4 = (!ab)
+n5 = (!ab)
+n6 = (n4!n5)
+n8 = !n6
+  \end{verbatim}
+  \item SyGuS (Syntax-Guided Synthesis) effectively builds terms fulfilling a given syntax, and checks for conformity with the specification. We use the syntax-guided synthesis of \verb!cvc4! \cite{CVC4}. Our approach agrees on the optimal-size formula with SyGuS on all tested cases. For larger inputs (starting from 5--6 variables), our approach is significantly (several orders of magnitude) faster than SyGuS. 
+\end{itemize}
+
+We would be interested in further approaches that we can compare our tool with.
+
+
+\subsection{Minimization criteria}
+
+Note that, currently, the \emph{length} of the resulting program, measured in the amount of \emph{instructions}, is minimized.
+This measure is equivalent to the minimization of ``Boolean chains'' from ABC \cite{DBLP:journals/tcad/HaaswijkSMM20}. Hence, our work is comparable with the work in \cite{DBLP:journals/tcad/HaaswijkSMM20}.
+
+For plain formula minimization, it is not allowed to re-use subterms at different places. For example,
+consider the formula $f(x_0, x_1, x_2, x_3) = ((x_0 \land x_1) \oplus (x_2 \land x_3))$. The following synthesized program (with library \verb!and2, or2, not!) re-uses the results $x_4$ and $x_5$, which would result in a blow-up in a linear formula.
+
+\begin{verbatim}
+  x4 = and2(x0, x1)
+  x5 = and2(x2, x3)
+  x6 = or2(x4, x5)
+  x7 = and2(x4, x5)
+  x8 = not(x7)
+  x9 = and2(x6, x8)
+  return(x9)
+\end{verbatim}
+
+If instead the size of a linear formula should be minimized, it is necessary to add further constraints that prevent re-using intermediate outputs (under research).
+
+\bibliography{article}
+\bibliographystyle{plain}
+
+%\section{Appendix}
+
+\end{document}
+
+%%
+%% End of file
