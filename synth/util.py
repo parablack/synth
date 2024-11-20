@@ -18,7 +18,7 @@ def timer():
 
 @dataclass
 class Debug:
-    level: int = 0
+    level: int = 1
 
     def __call__(self, l, *args):
         if l <= self.level:

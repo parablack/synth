@@ -18,7 +18,9 @@ class Eval:
         s = self.solver
         s.push()
         for var, val in zip(self.inputs, input_vals):
+            print("var, val=", var, val)
             s.add(var == val)
+        print(s)
         assert s.check() == sat
         res = eval_model(s.model(), self.outputs)
         s.pop()
@@ -40,16 +42,23 @@ class Eval:
                 res += [ ins ]
                 s.add(Or([ v != iv for v, iv in zip(self.inputs, ins) ]))
             else:
-                assert len(res) > 0, 'cannot evaluate'
+                if len(res) == 0:
+                    pass
+                #    d(2, "Cannot evaluate. This could be a bug in your specification")
+                #assert len(res) > 0, 'cannot evaluate'
         s.pop()
         return res
 
 class Spec:
+
+
     def collect_vars(expr):
         res = set()
         def collect(expr):
-            if len(expr.children()) == 0 and expr.decl().kind() == Z3_OP_UNINTERPRETED:
-                res.add(expr)
+           
+            if is_const(expr):
+                if expr.decl().kind() == Z3_OP_UNINTERPRETED:
+                    res.add(expr)
             else:
                 for c in expr.children():
                     collect(c)
@@ -94,12 +103,16 @@ class Spec:
         self.vars     = Spec.collect_vars(phi)
         all_vars      = outputs + inputs
         assert len(set(all_vars)) == len(all_vars), 'outputs and inputs must be unique'
-        assert self.vars <= set(all_vars), \
-            f'phi must use only out and in variables: {self.vars} vs {all_vars}'
+#        assert self.vars <= set(all_vars), \
+#            f'phi must use only out and in variables: {self.vars} vs {all_vars}'
+        assert set(inputs) <= set(self.vars), \
+            f'input variables must occur'
+        assert set(outputs) <= set(self.vars), \
+            f'output variables must occur'
         assert Spec.collect_vars(self.precond) <= set(self.inputs), \
             f'precondition must use input variables only'
-        assert Spec.collect_vars(self.phi) <= set(inputs + outputs), \
-            f'i-th spec must use only i-th out and input variables {phi}'
+#        assert Spec.collect_vars(self.phi) <= set(inputs + outputs), \
+#            f'i-th spec must use only i-th out and input variables {phi}'
 
     def __repr__(self):
         return self.name
@@ -302,13 +315,13 @@ class Prg:
             if not is_const:
                 self.output_map.setdefault(v, []).append(name)
 
-    def var_name(self, i):
+    def var_name(self, i, prefix=""):
         if i < len(self.input_names):
             return self.input_names[i]
         elif i in self.output_map:
-            return self.output_map[i][0]
+            return prefix + self.output_map[i][0]
         else:
-            return f'x{i}'
+            return f'{prefix}x{i}'
 
     def __eq__(self, other):
         return self.insns == other.insns and \
@@ -335,7 +348,7 @@ class Prg:
         for n_out, (o, p) in enumerate(zip(out_vars, self.outputs)):
             yield o == get_val(len(self.insns), n_out, o.sort(), p) 
 
-    def eval_clauses(self):
+    def eval_clauses(self, prefix=""):
         vars = list(self.in_vars)
         n_inputs = len(vars)
         def get_val(p):
@@ -346,11 +359,20 @@ class Prg:
             assert insn.ctx == self.ctx
             subst = [ (i, get_val(p)) \
                       for i, p in zip(insn.inputs, opnds) ]
-            res = Const(self.var_name(i + n_inputs), insn.func.sort())
+            res = Const(self.var_name(i + n_inputs, prefix), insn.func.sort())
             vars.append(res)
             yield res == substitute(insn.func, subst)
         for o, p in zip(self.out_vars, self.outputs):
             yield o == get_val(p)
+
+    def get_internal_vars(self, prefix=""):
+        vars = list(self.in_vars)
+        n_inputs = len(vars)
+        for i, (insn, opnds) in enumerate(self.insns):
+            assert insn.ctx == self.ctx
+            res = Const(self.var_name(i + n_inputs, prefix), insn.func.sort())
+            yield res
+
 
     def dce(self):
         live = set(insn for is_const, insn in self.outputs if not is_const)

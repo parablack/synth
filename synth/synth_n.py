@@ -144,6 +144,7 @@ class _Ctx(CegisBaseSynth):
             # create map of types to their id
             self.ty_enum = EnumSortEnum('Types', self.types, ctx)
 
+
         # get the sorts for the variables used in synthesis
         self.ty_sort = self.ty_enum.sort
         self.op_sort = self.op_enum.sort
@@ -160,6 +161,7 @@ class _Ctx(CegisBaseSynth):
         self.add_constr_wfp()
         self.add_constr_ty()
         self.add_constr_opt()
+
         self.d(1, 'size', self.n_insns)
 
     def sample_n(self, n):
@@ -248,6 +250,7 @@ class _Ctx(CegisBaseSynth):
         if not max_const is None and len(ran) > 0:
             solver.add(AtMost(*[ v for insn in ran \
                        for v in self.var_insn_opnds_is_const(insn)], max_const))
+        #solver.add(And(*[self.var_insn_opnds_is_const(insn).__next__()==False for insn in ran]))
 
         # limit the possible set of constants if desired
         if const_map:
@@ -312,6 +315,8 @@ class _Ctx(CegisBaseSynth):
         for inp, ty in enumerate(self.in_tys):
             solver.add(self.var_insn_res_type(inp) == types[ty])
 
+ 
+
         # define types of outputs
         for v, ty in zip(self.var_insn_opnds_type(self.out_insn), self.out_tys):
             solver.add(v == types[ty])
@@ -327,6 +332,7 @@ class _Ctx(CegisBaseSynth):
             self.ty_enum.add_range_constr(solver, self.var_insn_res_type(insn))
 
     def add_constr_opt(self):
+
         solver = self.synth
 
         def opnd_set(insn):
@@ -430,6 +436,14 @@ class _Ctx(CegisBaseSynth):
         self.synth.add(Implies(precond, phi))
 
     def create_prg(self, model):
+        # print(self.synth)
+        # print(f"{self.types=}")
+        # print(f"{self.ty_enum=}")
+        # print(f"{self.in_tys=}")
+        # print(f"{self.ops=}")
+        # print(f"{self.ty_enum.item_to_cons=}")
+        # exit(1)
+
         def prep_opnds(insn, tys):
             for _, opnd, c, cv in self.iter_opnd_info_struct(insn, tys):
                 if is_true(model[c]):

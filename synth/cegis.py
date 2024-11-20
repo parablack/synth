@@ -7,7 +7,11 @@ def cegis(spec: Spec, synth, init_samples=[], debug=no_debug):
     d = debug
 
     samples = init_samples if init_samples else spec.eval.sample_n(1)
-    assert len(samples) > 0, 'need at least 1 initial sample'
+    
+    if len(samples) == 0:
+        d(1, f'no initial samples, and sampling failed. Is the spec satisfiable?')
+        return None, []
+    # assert len(samples) > 0, 'need at least 1 initial sample'
 
     # set up the verification constraint
     verif = Solver(ctx=spec.ctx)
