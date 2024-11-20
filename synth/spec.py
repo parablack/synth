@@ -55,7 +55,7 @@ class Spec:
     def collect_vars(expr):
         res = set()
         def collect(expr):
-           
+
             if is_const(expr):
                 if expr.decl().kind() == Z3_OP_UNINTERPRETED:
                     res.add(expr)
@@ -103,16 +103,16 @@ class Spec:
         self.vars     = Spec.collect_vars(phi)
         all_vars      = outputs + inputs
         assert len(set(all_vars)) == len(all_vars), 'outputs and inputs must be unique'
-#        assert self.vars <= set(all_vars), \
-#            f'phi must use only out and in variables: {self.vars} vs {all_vars}'
+        assert self.vars <= set(all_vars), \
+            f'phi must use only out and in variables: {self.vars} vs {all_vars}'
         assert set(inputs) <= set(self.vars), \
             f'input variables must occur'
         assert set(outputs) <= set(self.vars), \
             f'output variables must occur'
         assert Spec.collect_vars(self.precond) <= set(self.inputs), \
             f'precondition must use input variables only'
-#        assert Spec.collect_vars(self.phi) <= set(inputs + outputs), \
-#            f'i-th spec must use only i-th out and input variables {phi}'
+        assert Spec.collect_vars(self.phi) <= set(inputs + outputs), \
+            f'i-th spec must use only i-th out and input variables {phi}'
 
     def __repr__(self):
         return self.name
@@ -346,7 +346,7 @@ class Prg:
             intermediate_vars.append(res)
             yield res == substitute(insn.func.translate(ctx), subst)
         for n_out, (o, p) in enumerate(zip(out_vars, self.outputs)):
-            yield o == get_val(len(self.insns), n_out, o.sort(), p) 
+            yield o == get_val(len(self.insns), n_out, o.sort(), p)
 
     def eval_clauses(self, prefix=""):
         vars = list(self.in_vars)
